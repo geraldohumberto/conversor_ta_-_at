@@ -29,11 +29,6 @@
             border: none;
             cursor: pointer;
         }
-        .modo-tts {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
     </style>
 </head>
 <body>
@@ -47,18 +42,9 @@
     <div id="tts-tab" class="tab active">
         <h2>Texto para Áudio</h2>
         
-        <textarea id="texto-input" rows="10" placeholder="Digite o texto para converter (máximo 200 caracteres)"></textarea>
+        <textarea id="texto-input" rows="10" placeholder="Digite o texto para converter"></textarea>
         
-        <div class="modo-tts">
-            <label>
-                <input type="radio" name="tts-modo" value="gtts" checked> Google TTS (Online)
-            </label>
-            <label>
-                <input type="radio" name="tts-modo" value="offline"> Modo Offline (Simulado)
-            </label>
-        </div>
-        
-        <button onclick="converterTextoParaAudio()">Converter</button>
+        <button onclick="converterTextoParaAudio()">Converter para Áudio (Google TTS)</button>
         
         <div>
             <audio id="audio-player" controls style="display:none; width:100%;"></audio>
@@ -71,7 +57,7 @@
         
         <input type="file" id="audio-input" accept="audio/*">
         
-        <button onclick="converterAudioParaTexto()">Transcrever</button>
+        <button onclick="converterAudioParaTexto()">Transcrever Áudio</button>
         
         <textarea id="texto-resultado" rows="10" readonly placeholder="Texto transcrito aparecerá aqui"></textarea>
     </div>
@@ -85,7 +71,6 @@
 
         async function converterTextoParaAudio() {
             const texto = document.getElementById('texto-input').value.trim();
-            const modoSelecionado = document.querySelector('input[name="tts-modo"]:checked').value;
             const audioPlayer = document.getElementById('audio-player');
             const downloadButton = document.getElementById('download-audio');
             
@@ -94,59 +79,59 @@
                 return;
             }
 
-            // Limita o texto para evitar problemas com a API
-            const textoLimitado = texto.slice(0, 200);
+            try {
+                // Divide o texto em partes para contornar limitações
+                const partesTexto = dividirTexto(texto);
+                const audioUrls = await Promise.all(partesTexto.map(criarUrlAudio));
 
-            if (modoSelecionado === 'gtts') {
+                // Concatena os blobs de áudio
+                const audioBlobs = await Promise.all(audioUrls.map(async (url) => {
+                    const response = await fetch(url);
+                    return await response.blob();
+                }));
+
+                const audioBlob = new Blob(audioBlobs, { type: 'audio/mp3' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+
+                // Configura o player de áudio
+                audioPlayer.src = audioUrl;
+                audioPlayer.style.display = 'block';
+                downloadButton.style.display = 'block';
+
+                // Tenta reproduzir
                 try {
-                    // Cria múltiplas requisições para contornar limitações de tamanho
-                    const partes = [];
-                    const palavras = textoLimitado.split(' ');
-                    let parteAtual = '';
-
-                    for (const palavra of palavras) {
-                        if ((parteAtual + ' ' + palavra).length > 100) {
-                            partes.push(parteAtual.trim());
-                            parteAtual = palavra;
-                        } else {
-                            parteAtual += ' ' + palavra;
-                        }
-                    }
-                    if (parteAtual) partes.push(parteAtual.trim());
-
-                    // Gera URLs para cada parte
-                    const audioUrls = partes.map(parte => 
-                        `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-BR&q=${encodeURIComponent(parte)}`
-                    );
-
-                    // Cria um blob de áudio concatenado
-                    const audioBlobs = await Promise.all(audioUrls.map(async (url) => {
-                        const response = await fetch(url);
-                        return await response.blob();
-                    }));
-
-                    const audioBlob = new Blob(audioBlobs, { type: 'audio/mp3' });
-                    const audioUrl = URL.createObjectURL(audioBlob);
-
-                    // Configura o player de áudio
-                    audioPlayer.src = audioUrl;
-                    audioPlayer.style.display = 'block';
-                    downloadButton.style.display = 'block';
-
-                    // Tenta reproduzir
-                    try {
-                        await audioPlayer.play();
-                    } catch (playError) {
-                        console.warn('Reprodução automática bloqueada:', playError);
-                    }
-
-                } catch (error) {
-                    console.error('Erro na conversão de texto para áudio:', error);
-                    alert('Não foi possível converter o texto para áudio. Verifique sua conexão.');
+                    await audioPlayer.play();
+                } catch (playError) {
+                    console.warn('Reprodução automática bloqueada:', playError);
                 }
-            } else {
-                alert('Modo offline não disponível na versão web.');
+
+            } catch (error) {
+                console.error('Erro na conversão de texto para áudio:', error);
+                alert('Não foi possível converter o texto para áudio. Verifique sua conexão.');
             }
+        }
+
+        function dividirTexto(texto, tamanhoParte = 200) {
+            const partes = [];
+            let parteAtual = '';
+
+            const palavras = texto.split(/\s+/);
+            palavras.forEach(palavra => {
+                if ((parteAtual + ' ' + palavra).length > tamanhoParte) {
+                    partes.push(parteAtual.trim());
+                    parteAtual = palavra;
+                } else {
+                    parteAtual += ' ' + palavra;
+                }
+            });
+
+            if (parteAtual) partes.push(parteAtual.trim());
+
+            return partes;
+        }
+
+        function criarUrlAudio(texto) {
+            return `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-BR&q=${encodeURIComponent(texto)}`;
         }
 
         function downloadAudio() {
@@ -174,7 +159,7 @@
             const leitor = new FileReader();
             
             leitor.onload = (e) => {
-                // Simula transcrição (na realidade, precisaria de um serviço de STT)
+                // Simulação de transcrição
                 textoResultado.value = `Transcrição simulada do arquivo: ${arquivo.name}\n\nNa versão completa, usaríamos um serviço de conversão de áudio para texto.`;
             };
             
